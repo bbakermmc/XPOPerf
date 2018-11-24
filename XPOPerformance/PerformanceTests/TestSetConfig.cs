@@ -12,7 +12,7 @@ namespace ORMBenchmark.PerformanceTests {
     public class TestSetConfig : ManualConfig
     {
 
-        public static long[] RowCounts = new long[] {10,100,250,1000,2500};//50, 100};//10, 50, 100, 250, 500, 1000, 2500, 5000 };
+        public static long[] RowCounts = new long[] {50,200};//50, 100};//10, 50, 100, 250, 500, 1000, 2500, 5000 };
 
         public TestSetConfig() {
             var job = Job.Clr
@@ -24,12 +24,15 @@ namespace ORMBenchmark.PerformanceTests {
                     .WithMaxRelativeError(0.1)
                     .WithUnrollFactor(1);
             job.Run.RunStrategy = BenchmarkDotNet.Engines.RunStrategy.Throughput;
+            
             Add(job);
             Set(new TestSetOrderProvider());
             Add(JitOptimizationsValidator.DontFailOnError);
             Add(DefaultConfig.Instance.GetLoggers().ToArray());
             Add(DefaultConfig.Instance.GetExporters().ToArray());
             Add(DefaultConfig.Instance.GetColumnProviders().ToArray());
+          //  Set(new FastestToSlowestOrderer());
+          //  Set(new DefaultOrderer(SummaryOrderPolicy.Default));
         }
 
         private class TestSetOrderProvider : IOrderer {
@@ -41,27 +44,33 @@ namespace ORMBenchmark.PerformanceTests {
             }
 
             public IEnumerable<BenchmarkCase> GetExecutionOrder(BenchmarkCase[] benchmarksCase) {
-                return benchmarksCase;
-            }
-
-            public IEnumerable<BenchmarkCase> GetSummaryOrder(BenchmarkCase[] benchmarksCase, Summary summary) {
                 return benchmarksCase
-                    .OrderBy(t => t.Parameters["Count"])
-                    .ThenBy(t => t.Descriptor.WorkloadMethodDisplayInfo.ToString())
-                    .ThenBy(t => t.Parameters["TestProvider"].ToString());
+                       .OrderBy(t => t.Descriptor.WorkloadMethodDisplayInfo.ToString())
+                       .ThenBy(t => t.Parameters["RowCount"]);
+
             }
 
-            public string GetHighlightGroupKey(BenchmarkCase benchmarkCase) {
-                return null;
+            public IEnumerable<BenchmarkCase> GetSummaryOrder(BenchmarkCase[] benchmarksCase, Summary summary) =>
+                from benchmark in benchmarksCase
+                orderby benchmark.Descriptor.WorkloadMethod,
+                    benchmark.Parameters["RowCount"],
+                    summary[benchmark].ResultStatistics.Mean
+                select benchmark;
+
+            public string GetHighlightGroupKey(BenchmarkCase benchmarkCase)
+            {
+                return benchmarkCase.DisplayInfo.Contains("XPO") ? benchmarkCase.DisplayInfo : null;
             }
 
             public string GetLogicalGroupKey(IConfig config, BenchmarkCase[] allBenchmarksCases, BenchmarkCase benchmarkCase) {
-                return null;
+                return benchmarkCase.Descriptor.WorkloadMethod + "_" + benchmarkCase.Parameters["RowCount"];
             }
 
             public IEnumerable<IGrouping<string, BenchmarkCase>> GetLogicalGroupOrder(IEnumerable<IGrouping<string, BenchmarkCase>> logicalGroups) {
                 return logicalGroups;
             }
+            
+            
         }
     }
 }
